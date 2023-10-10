@@ -1,88 +1,94 @@
 import express from "express";
 import pkg from "pg";
 const { Pool } = pkg;
+import cors from 'cors'
 
 const app = express();
-const PORT = 3000;
+const PORT = 8080;
 
 const pool = new Pool({
   connectionString: "postgres://postgres:1015@localhost:5432/blog",
 });
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(cors())
 
-app.get("/", async (req, res) => {
+app.get("/posts", async (req, res) => {
   try {
-    const posts = await pool.query("SELECT * FROM posts");
-    res.json({ posts: posts.rows });
+    const result = await pool.query("SELECT * FROM posts");
+    const posts = result.rows;
+    res.json({ posts });
   } catch (error) {
     console.error("Error fetching data from the database:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-app.get("/:id", async (req, res) => {
+app.get("/posts/:id", async (req, res) => {
   const postId = req.params.id;
   try {
-    const post = await pool.query("SELECT * FROM posts WHERE id = $1", [
+    const result = await pool.query("SELECT * FROM posts WHERE id = $1", [
       postId,
     ]);
-    if (post.rows.length === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ message: "Post not found" });
     }
-    res.status(200).json({ post: post.rows[0] });
+    res.json({ message: "Post retrieved successfully", post: result.rows[0] });
   } catch (error) {
-    console.error("Error fetching data from the database:", error);
+    console.error("Error retrieving post:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-app.post("/create", async (req, res) => {
+app.post("/posts", async (req, res) => {
   const { title, content } = req.body;
 
   try {
-   const post = await pool.query("INSERT INTO posts (title, content) VALUES ($1, $2)", [
-      title,
-      content,
-    ]);
-    res.status(201).json({ message: "Post created successfully",data:post });
+    const result = await pool.query(
+      "INSERT INTO posts (title, content) VALUES ($1, $2) RETURNING *",
+      [title, content]
+    );
+    const newPost = result.rows[0];
+    res
+      .status(201)
+      .json({ message: "Post created successfully", post: newPost });
   } catch (error) {
     console.error("Error inserting data into the database:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-app.put("/update/:id", async (req, res) => {
+app.put("/posts/:id", async (req, res) => {
   const postId = req.params.id;
   const { title, content } = req.body;
 
   try {
     const result = await pool.query(
-      "UPDATE posts SET title = $1, content = $2 WHERE id = $3",
+      "UPDATE posts SET title = $1, content = $2 WHERE id = $3 RETURNING *",
       [title, content, postId]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ message: "Post not found" });
     }
-    res.json({ message: "Post updated successfully" });
+    res.json({ message: "Post updated successfully", post: result.rows[0] });
   } catch (error) {
     console.error("Error updating post:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-app.delete("/delete/:id", async (req, res) => {
+app.delete("/posts/:id", async (req, res) => {
   const postId = req.params.id;
 
   try {
-    const result = await pool.query("DELETE FROM posts WHERE id = $1", [
-      postId,
-    ]);
+    const result = await pool.query(
+      "DELETE FROM posts WHERE id = $1 RETURNING *",
+      [postId]
+    );
     if (result.rowCount === 0) {
       return res.status(404).json({ message: "Post not found" });
     }
-    res.json({ message: "Post deleted successfully" });
+    res.json({ message: "Post deleted successfully", post: result.rows[0] });
   } catch (error) {
     console.error("Error deleting post:", error);
     res.status(500).json({ error: "Internal Server Error" });
